@@ -1,0 +1,13 @@
+{
+    "root": {
+        "check_interval": 30,
+        "print_interval": 60,
+        "data_path":"./",
+        "logger": {
+            "log_path": "./log",
+            "log_level": "DEBUG"
+        },
+        "request_header": {}
+    },
+    "room_ids":["22967601","13355"]
+}

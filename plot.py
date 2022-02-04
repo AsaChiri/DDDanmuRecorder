@@ -9,6 +9,8 @@ import jieba
 from collections import Counter
 import wordcloud
 import matplotlib
+from PIL import Image
+import numpy as np
  
 font = {'family': 'MicroSoft Yahei',
        'weight': 'regular',
@@ -57,10 +59,10 @@ def parse_gift(dir_name):
             for obj in reader:
                 gift_list.append({
                     "isSilver": False,
-                    "giftName": obj['gift_name'],
+                    "giftName": obj['role_name'],
                     "price": obj['price'],
                     "num": obj['num'],
-                    "cost": obj['price']*obj['num'],
+                    "cost": obj['price'],
                     "time": obj['time']
                 })
     if os.path.exists(os.path.join(dir_name, 'superchat.jsonl')):
@@ -83,7 +85,7 @@ def plot_danmu(dir_name, interval=60, SC_ratio=1, min_UL=0):
     try:
         with open(os.path.join(dir_name, "live_end_time"), "r", encoding="utf-8") as f:
             end_timestamp = f.read()
-            end_timestamp = end_timestamp.strip()
+            end_timestamp = int(end_timestamp.strip())
     except Exception:
         end_timestamp = danmu_list[-1]['time']
 
@@ -121,7 +123,7 @@ def plot_gift(dir_name, interval=60, silver_ratio=0):
     try:
         with open(os.path.join(dir_name, "live_end_time"), "r", encoding="utf-8") as f:
             end_timestamp = f.read()
-            end_timestamp = end_timestamp.strip()
+            end_timestamp = int(end_timestamp.strip())
     except Exception:
         end_timestamp = gift_list[-1]['time']
 
@@ -152,12 +154,25 @@ def plot_gift(dir_name, interval=60, silver_ratio=0):
 
 
 def generateClouds(output_words,output_file):
-    w = wordcloud.WordCloud(font_path="msyh.ttc",)
+    # color_image = np.array(Image.open("logo_color.png"))
+    # w = wordcloud.WordCloud(font_path="msyh.ttc",width=2880,height=1620,background_color="#FFFFFF", max_words=2000, mask=color_image,contour_width=3, contour_color='pink')
+    # image_colors = wordcloud.ImageColorGenerator(color_image)
+    # w.generate_from_frequencies(output_words)
+    # plt.figure(dpi=300,figsize=(9.6,5.4))
+    # plt.imshow(w.recolor(color_func=image_colors), interpolation='bilinear')
+    # plt.axis("off")
+    # plt.savefig(output_file)
+    # plt.show()
+
+    mask_image = np.array(Image.open("logo_color.png"))
+    w = wordcloud.WordCloud(font_path="msyh.ttc",width=2880,height=1620,background_color="white", max_words=2000, mask=mask_image,contour_width=3, contour_color='blue')
     w.generate_from_frequencies(output_words)
-    plt.imshow(w)
+    plt.figure(dpi=300,figsize=(9.6,5.4))
+    plt.imshow(w, interpolation='bilinear')
     plt.axis("off")
     plt.savefig(output_file)
     plt.show()
+
 
 def summary(dir_name, topK=10):
     # 统计弹幕高频词和数量
@@ -243,22 +258,22 @@ def summary(dir_name, topK=10):
                 user_uid = obj['user_id']
                 user_name = obj['user_name']
                 if user_uid in gift_user_dict:
-                    gift_user_dict[user_uid][1] += obj['total_coin']
+                    gift_user_dict[user_uid][1] += 0 if obj['coin_type'] == 'silver' else obj['total_coin']
                 else:
                     gift_user_dict[user_uid] = [
-                        user_name, obj['total_coin']]
+                        user_name, 0 if obj['coin_type'] == 'silver' else obj['total_coin']]
     if os.path.exists(os.path.join(dir_name, 'guard.jsonl')):
         with jsonlines.open(os.path.join(dir_name, 'guard.jsonl')) as reader:
             for obj in reader:
-                gold_total += obj['price']*obj['num']
+                gold_total += obj['price']
                 guard_num[obj['guard_level']]+=obj['num']
                 user_uid = obj['user_id']
                 user_name = obj['user_name']
                 if user_uid in gift_user_dict:
-                    gift_user_dict[user_uid][1] += obj['price']*obj['num']
+                    gift_user_dict[user_uid][1] += obj['price']
                 else:
                     gift_user_dict[user_uid] = [
-                        user_name, obj['price']*obj['num']]
+                        user_name, obj['price']]
     if os.path.exists(os.path.join(dir_name, 'superchat.jsonl')):
         with jsonlines.open(os.path.join(dir_name, 'superchat.jsonl')) as reader:
             for obj in reader:
@@ -333,11 +348,12 @@ def summary(dir_name, topK=10):
     赠送金瓜子礼物最多的{topK}个观众为
         {f";{nl}        ".join([f"UID:{x[0]} 用户名：{x[1][0]} 赠送礼物价值：{x[1][1]} 即{x[1][1]/1000:.2f}元人民币" for x in topK_gift_sender])}。
 
-    本场直播共记录到{interaction_num}条互动记录。互动观众佩戴的粉丝牌数量共有{interaction_medal_num}种。
-    其中最常见的{topK}个粉丝牌为
-        {f";{nl}        ".join([f"粉丝牌主播UID:{x[0]} 粉丝牌：{x[1][0]} 佩戴人数：{len(x[1][1])} 平均等级：{sum(x[1][1])/len(x[1][1]):.2f}" for x in topK_common_interaction_medal])}。
-    """)
+    本场直播共记录到{interaction_num}条互动记录。
 
+    """)
+    # 互动观众佩戴的粉丝牌数量共有{interaction_medal_num}种。
+    # 其中最常见的{topK}个粉丝牌为
+    #     {f";{nl}        ".join([f"粉丝牌主播UID:{x[0]} 粉丝牌：{x[1][0]} 佩戴人数：{len(x[1][1])} 平均等级：{sum(x[1][1])/len(x[1][1]):.2f}" for x in topK_common_interaction_medal])}。
 
 if __name__ == "__main__":
     try:
@@ -399,7 +415,7 @@ if __name__ == "__main__":
                 silver_ratio = int(silver_ratio)
             plot_gift(dir_name, interval=interval, silver_ratio=silver_ratio)
         elif fh == "3":
-            topK = input("请榜单大小，留空则为默认值10：\n").strip()
+            topK = input("请输入榜单大小，留空则为默认值10：\n").strip()
             if topK == "":
                 topK = 10
             else:

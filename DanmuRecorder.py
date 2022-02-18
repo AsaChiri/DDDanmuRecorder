@@ -5,7 +5,6 @@ import time
 import json
 import logging
 import jsonlines
-import zlib
 from aiowebsocket.converses import AioWebSocket
 import traceback
 import utils
@@ -213,7 +212,7 @@ class BiliDanmuRecorder(BiliLive):
                         f.write(str(int(round(time.time()))))
                 elif jd['cmd'] == 'INTERACT_WORD':
                     data = jd.get("data",{})
-                    medal_info = data.get("medal_info",{})
+                    medal_info = data.get("fans_medal",{})
                     interact_writer = jsonlines.open(os.path.join(self.dir_name,"interaction.jsonl"),mode="a")
                     interact_writer.write({
                         "raw":data,

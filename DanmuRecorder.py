@@ -5,18 +5,21 @@ import time
 import json
 import logging
 import jsonlines
-from aiowebsocket.converses import AioWebSocket
+import websockets
 import traceback
 import utils
 from BiliLive import BiliLive
 import brotli
 import struct
+from retrying import retry
 
 class BiliDanmuRecorder(BiliLive):
     def __init__(self, config: dict, global_start: datetime.datetime):
         BiliLive.__init__(self, config)
+        self.get_room_info()
         self.conf = self.get_room_conf()
-        self.room_server_api = f"wss://{self.conf['available_hosts'][0]['host']}:{self.conf['available_hosts'][0]['wss_port']}/sub"
+        self.host_idx = 0
+        self.room_server_api = f"wss://{self.conf['available_hosts'][self.host_idx]['host']}:{self.conf['available_hosts'][self.host_idx]['wss_port']}/sub"
         self.dir_name = utils.init_data_dir(self.room_id,global_start,config['root']['data_path'])
 
     def __pack(self,data: bytes, protocol_version: int, datapack_type: int):
@@ -43,21 +46,31 @@ class BiliDanmuRecorder(BiliLive):
 
     async def __receDM(self, websocket):
         while self.live_status:
-            recv_text = await websocket.receive()
+            recv_text = await websocket.recv()
             if recv_text:
                 self.__printDM(recv_text)
 
     async def __startup(self):
-        verify_data = {"uid": 0, "roomid": int(self.room_id),
+        verify_data = {"uid": 4738644, "roomid": int(self.room_id),
                     "protover": 3, "platform": "web", "type": 2, "key": self.conf['token']}
         data = json.dumps(verify_data).encode()
         
-        async with AioWebSocket(self.room_server_api) as aws:
-            converse = aws.manipulator
-            logging.info(self.generate_log("发送验证消息包"))
-            await self.__send(data, 1, 7, converse)
-            tasks = [self.__receDM(converse), self.__send_heart_beat(converse)]
-            await asyncio.wait(tasks)
+        while self.live_status:
+            print(f"Room:{self.room_id} URI:{self.room_server_api}")
+            try:
+                async with websockets.connect(self.room_server_api, origin="https://live.bilibili.com",extra_headers=self.headers) as aws:
+                    logging.info(self.generate_log("发送验证消息包"))
+                    await self.__send(data, 1, 7, aws)
+                    tasks = [asyncio.create_task(self.__receDM(aws)), asyncio.create_task(self.__send_heart_beat(aws))]
+                    await asyncio.wait(tasks)
+            except KeyboardInterrupt:
+                raise KeyboardInterrupt
+            except Exception:
+                pass
+            if self.host_idx < len(self.conf['available_hosts']) - 1:
+                self.host_idx += 1
+                self.room_server_api = f"wss://{self.conf['available_hosts'][self.host_idx]['host']}:{self.conf['available_hosts'][self.host_idx]['wss_port']}/sub"
+        
 
     def run(self):
         logging.basicConfig(level=utils.get_log_level(self.config),
@@ -66,10 +79,7 @@ class BiliDanmuRecorder(BiliLive):
                             handlers=[logging.FileHandler(os.path.join(self.config['root']['logger']['log_path'], "DanmuRecoder_"+datetime.datetime.now(
                             ).strftime('%Y-%m-%d_%H-%M-%S')+'.log'), "a", encoding="utf-8")])
         try:
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(self.__startup())
+            asyncio.run(self.__startup())
         except KeyboardInterrupt:
             logging.info(self.generate_log("键盘指令退出"))
 
